@@ -42,7 +42,7 @@ class GitQuickCommitCommand(GitTextCommand):
         if result.strip():
             sublime.error_message("Error adding file:\n" + result)
             return
-        self.run_command(['git', 'commit', '-m', message])
+        self.run_command(['git', 'commit', '-s', '-m', message])
 
 
 # Commit is complicated. It'd be easy if I just wanted to let it run
@@ -77,6 +77,15 @@ class GitCommitCommand(GitWindowCommand):
             self.porcelain_status_done
         )
 
+        self.run_command(['git', 'config', '--get', 'user.name'], self.set_user_name)
+        self.run_command(['git', 'config', '--get', 'user.email'], self.set_user_email)
+
+    def set_user_name(self, result):
+        self.user_name = result.strip()
+
+    def set_user_email(self, result):
+        self.user_email = result.strip()
+
     def porcelain_status_done(self, result):
         # todo: split out these status-parsing things... asdf
         has_staged_files = False
@@ -106,6 +115,7 @@ class GitCommitCommand(GitWindowCommand):
         if not len(self.lines):
             self.lines = ["", ""]
 
+        self.lines.extend([self.commit_signature, ""])
         self.lines.extend(map(format, history[:historySize]))
         self.lines.extend([
             "# --------------",
@@ -133,7 +143,7 @@ class GitCommitCommand(GitWindowCommand):
         historySize = settings.get('history_size')
         lines = [
             line for line in message.split("\n# --------------")[0].split("\n")
-            if not line.lstrip().startswith('#')
+            if not line.lstrip().startswith('#') and not line.lstrip() == self.commit_signature
         ]
         message = '\n'.join(lines).strip()
 
@@ -147,7 +157,7 @@ class GitCommitCommand(GitWindowCommand):
         # and actually commit
         with codecs.open(message_file.name, mode='r', encoding='utf-8') as fp:
             self.run_command(
-                ['git', 'commit', '-F', '-', self.extra_options],
+                ['git', 'commit', '-s', '-F', '-', self.extra_options],
                 self.commit_done, working_dir=self.working_dir, stdin=fp.read()
             )
 
@@ -155,6 +165,9 @@ class GitCommitCommand(GitWindowCommand):
         os.remove(self.message_file.name)
         self.panel(result)
 
+    @property
+    def commit_signature(self):
+        return "Signed-off-by: %s <%s>" % (self.user_name, self.user_email)
 
 class GitCommitAmendCommand(GitCommitCommand):
     extra_options = "--amend"
